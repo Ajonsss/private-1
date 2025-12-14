@@ -2,6 +2,7 @@ const Financial = require('../models/financialModel');
 const Notification = require('../models/notificationModel');
 const User = require('../models/userModel');
 const axios = require('axios'); // Required for iProgSMS
+require('dotenv').config();
 
 // --- HELPER: Calculate Next Date based on Day Name ---
 function getNextDayOfWeek(startDate, dayName) {
@@ -9,17 +10,17 @@ function getNextDayOfWeek(startDate, dayName) {
         "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3,
         "Thursday": 4, "Friday": 5, "Saturday": 6
     };
-    
+
     const resultDate = new Date(startDate.getTime());
-    resultDate.setHours(0,0,0,0);
+    resultDate.setHours(0, 0, 0, 0);
 
     const targetDay = dayMap[dayName];
     const currentDay = resultDate.getDay();
-    
+
     // Calculate days to add. If today is the target day, we schedule for next week (7 days later)
     let distance = (targetDay + 7 - currentDay) % 7;
     if (distance === 0) distance = 7;
-    
+
     resultDate.setDate(resultDate.getDate() + distance);
     return resultDate;
 }
@@ -27,14 +28,15 @@ function getNextDayOfWeek(startDate, dayName) {
 // --- NEW: SMS NOTIFICATION ---
 exports.sendSmsNotification = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
-    
+
     const { phone_number, message } = req.body;
 
     // Use axios to send a POST request with Query Parameters matches your URL structure
     // Endpoint: https://www.iprogsms.com/api/v1/sms_messages
     axios.post('https://www.iprogsms.com/api/v1/sms_messages', null, {
         params: {
-            api_token: "699548218c31db93a667e2b6e2ec979db6781904", // Your Actual API Key
+            // FIXED: Removed quotes so it reads the variable from .env
+            api_token: process.env.IPROGSMS_API_KEY, 
             message: message,
             phone_number: phone_number
         }
@@ -59,18 +61,18 @@ exports.sendSmsNotification = (req, res) => {
 // --- LOANS ---
 exports.assignLoan = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
-    
+
     const { user_id, amount, loan_name, weeks, payment_day, weekly_amount } = req.body;
 
     Financial.findActiveLoan(user_id, (err, result) => {
         if (result.length > 0) return res.json({ Error: "Member already has an active loan." });
 
-        const loanData = { 
-            user_id, 
-            amount, 
+        const loanData = {
+            user_id,
+            amount,
             loan_name: loan_name || 'Personal Loan',
-            weeks_to_pay: weeks,       
-            payment_day: payment_day,  
+            weeks_to_pay: weeks,
+            payment_day: payment_day,
             weekly_amount: weekly_amount
         };
 
@@ -81,10 +83,10 @@ exports.assignLoan = (req, res) => {
 
             // --- AUTOMATIC SCHEDULE GENERATION ---
             let currentDateTracker = new Date();
-            
-            for(let i = 0; i < weeks; i++) {
+
+            for (let i = 0; i < weeks; i++) {
                 currentDateTracker = getNextDayOfWeek(currentDateTracker, payment_day);
-                
+
                 const recordData = {
                     user_id: user_id,
                     type: 'loan_payment',
@@ -94,7 +96,7 @@ exports.assignLoan = (req, res) => {
                     status: 'pending'
                 };
 
-                Financial.createRecord(recordData, () => {});
+                Financial.createRecord(recordData, () => { });
             }
 
             // Notifications
@@ -102,10 +104,10 @@ exports.assignLoan = (req, res) => {
                 const memberName = userRes[0]?.full_name || "Member";
                 const memberMsg = `New Loan: ${loanData.loan_name} - ₱${amount}. Payable in ${weeks} weeks (₱${weekly_amount}/week).`;
                 const adminMsg = `You assigned Loan (${loanData.loan_name}) to ${memberName}`;
-                
-                Notification.create(user_id, memberMsg, () => {});
-                Notification.create(req.user.id, adminMsg, () => {});
-                
+
+                Notification.create(user_id, memberMsg, () => { });
+                Notification.create(req.user.id, adminMsg, () => { });
+
                 return res.json({ Status: "Success" });
             });
         });
@@ -118,7 +120,7 @@ exports.deleteActiveLoan = (req, res) => {
     const loanId = req.params.loanId;
 
     Financial.deleteLoan(loanId, (err) => {
-        if(err) return res.json({ Error: "Error deleting loan" });
+        if (err) return res.json({ Error: "Error deleting loan" });
         return res.json({ Status: "Success" });
     });
 };
@@ -139,8 +141,8 @@ exports.assignRecord = (req, res) => {
             const memberMsg = `Reminder: ${typeText} of ₱${amount} is due on ${due_date}`;
             const adminMsg = `You assigned a ${typeText} (₱${amount}) to ${memberName}`;
 
-            Notification.create(user_id, memberMsg, () => {});
-            Notification.create(req.user.id, adminMsg, () => {});
+            Notification.create(user_id, memberMsg, () => { });
+            Notification.create(req.user.id, adminMsg, () => { });
 
             res.json({ Status: "Success" });
         });
@@ -149,7 +151,7 @@ exports.assignRecord = (req, res) => {
 
 exports.markPaid = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
-    
+
     Financial.findById(req.params.id, (err, result) => {
         if (err || result.length === 0) return res.json({ Error: "Record not found" });
         const record = result[0];
@@ -158,7 +160,7 @@ exports.markPaid = (req, res) => {
 
         const today = new Date();
         const due = new Date(record.due_date);
-        today.setHours(0,0,0,0); due.setHours(0,0,0,0);
+        today.setHours(0, 0, 0, 0); due.setHours(0, 0, 0, 0);
         const newStatus = today > due ? 'late' : 'paid';
 
         Financial.updateStatus(req.params.id, newStatus, (err) => {
@@ -166,7 +168,7 @@ exports.markPaid = (req, res) => {
 
             if (record.type === 'loan_payment' && record.loan_id) {
                 Financial.updateLoanBalance(record.loan_id, record.amount, '-', (err) => {
-                    Financial.closeLoan(record.loan_id, () => {});
+                    Financial.closeLoan(record.loan_id, () => { });
                     return res.json({ Status: "Success" });
                 });
             } else {
@@ -178,7 +180,7 @@ exports.markPaid = (req, res) => {
 
 exports.resetStatus = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
-    
+
     Financial.findById(req.params.id, (err, result) => {
         if (err || result.length === 0) return res.json({ Error: "Record not found" });
         const record = result[0];
@@ -197,7 +199,7 @@ exports.resetStatus = (req, res) => {
 
 exports.deleteRecord = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
-    
+
     Financial.findById(req.params.id, (err, result) => {
         if (err || result.length === 0) return res.json({ Error: "Record not found" });
         const record = result[0];
@@ -229,9 +231,9 @@ exports.getMemberDetails = (req, res) => {
     User.findById(userId, (err, userRes) => {
         if (err || userRes.length === 0) return res.json({ Error: "User not found" });
         const user = userRes[0];
-        
-        if (user.role === 'leader') { 
-            delete user.profile_picture; delete user.birthdate; delete user.spouse_name; 
+
+        if (user.role === 'leader') {
+            delete user.profile_picture; delete user.birthdate; delete user.spouse_name;
         }
 
         Financial.findActiveLoan(userId, (err, loanRes) => {
