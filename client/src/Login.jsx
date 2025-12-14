@@ -9,6 +9,14 @@ function Login() {
 
     const handleSubmit = (event) => {
         event.preventDefault();
+
+        // --- VALIDATION START ---
+        if (/[^0-9]/.test(values.phone_number)) {
+            setError("Error: Phone number must contain ONLY numbers.");
+            return;
+        }
+        // --- VALIDATION END ---
+
         axios.post('http://localhost:8081/login', values)
             .then(res => {
                 if(res.data.Status === "Success") {
@@ -25,7 +33,6 @@ function Login() {
 
     return (
         <div className='flex justify-center items-center h-screen p-4'>
-            {/* GLASS CONTAINER */}
             <div className='bg-white/0 backdrop-blur-[50px] p-8 rounded-[30px] shadow-lg w-full max-w-sm border border-white/50'>
                 <h2 className='text-2xl font-bold mb-6 text-center text-white'>Cluster System Login</h2>
                 

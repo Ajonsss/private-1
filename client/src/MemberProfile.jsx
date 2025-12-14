@@ -56,7 +56,6 @@ function MemberProfile() {
                         birthdate: res.data.user.birthdate ? res.data.user.birthdate.split('T')[0] : '',
                         spouse_name: res.data.user.spouse_name || ''
                     });
-                    // Initialize auth form with current phone
                     setAuthForm({ new_phone: res.data.user.phone_number, new_password: '' });
                 }
                 setLoading(false);
@@ -73,6 +72,27 @@ function MemberProfile() {
     const handleAuthChange = (e) => setAuthForm({ ...authForm, [e.target.name]: e.target.value });
 
     const handleSaveMember = () => {
+        // --- VALIDATION START ---
+        // 1. Check Full Name
+        if (/\d/.test(editForm.full_name)) {
+            alert("Error: Name must contain ONLY letters.");
+            return;
+        }
+        // 2. Check Spouse Name
+        if (editForm.spouse_name && /\d/.test(editForm.spouse_name)) {
+            alert("Error: Spouse name must contain ONLY letters.");
+            return;
+        }
+        
+        // 3. Check New Phone (Must be digits only AND exactly 11 chars)
+        if (authForm.new_phone !== data.user.phone_number) {
+            if (/[^0-9]/.test(authForm.new_phone) || authForm.new_phone.length !== 11) {
+                alert("Error: New Phone Number must contain exactly 11 numbers.");
+                return;
+            }
+        }
+        // --- VALIDATION END ---
+
         const token = localStorage.getItem('token');
         axios.put(`http://localhost:8081/update-member/${id}`, editForm, { headers: { Authorization: token } })
             .then(res => {
@@ -99,7 +119,6 @@ function MemberProfile() {
             });
     };
 
-    // --- FINANCIAL HANDLERS ---
     const handleCreateLoan = () => {
         const token = localStorage.getItem('token');
         if(!loanAmount || !loanWeeks) return alert("Please fill all loan details");
@@ -127,24 +146,16 @@ function MemberProfile() {
                 else alert(res.data.Error);
             });
     };
-
     const handleDeleteLoan = () => {
         if(!data.activeLoan) return;
         if(!window.confirm("WARNING: This will delete the active loan and all its associated history. Are you sure?")) return;
-
         const token = localStorage.getItem('token');
         axios.delete(`http://localhost:8081/delete-active-loan/${data.activeLoan.id}`, { headers: { Authorization: token } })
             .then(res => {
-                if(res.data.Status === "Success") {
-                    alert("Loan Deleted Successfully");
-                    fetchData();
-                } else {
-                    alert(res.data.Error);
-                }
-            })
-            .catch(err => console.log(err));
+                if(res.data.Status === "Success") { alert("Loan Deleted Successfully"); fetchData(); } 
+                else { alert(res.data.Error); }
+            }).catch(err => console.log(err));
     }
-
     const handleAssignRecord = (e) => {
         e.preventDefault();
         const token = localStorage.getItem('token');
@@ -155,48 +166,20 @@ function MemberProfile() {
                 else alert(res.data.Error);
             });
     };
-
-    // --- NEW SMS HANDLER ---
     const handleSendSMS = (record) => {
         if (!window.confirm(`Send SMS reminder to ${data.user.phone_number}?`)) return;
-
         const token = localStorage.getItem('token');
         const message = `Hi ${data.user.full_name}, this is a reminder for your ${record.type.replace('_', ' ')} of P${record.amount} due on ${new Date(record.due_date).toLocaleDateString()}. Please pay on time.`;
-
-        axios.post('http://localhost:8081/send-sms', {
-            phone_number: data.user.phone_number,
-            message: message
-        }, {
-            headers: { Authorization: token }
-        })
+        axios.post('http://localhost:8081/send-sms', { phone_number: data.user.phone_number, message: message }, { headers: { Authorization: token } })
         .then(res => {
-            if (res.data.Status === "Success") {
-                alert("SMS Sent Successfully!");
-            } else {
-                alert("Error sending SMS: " + (res.data.Details ? JSON.stringify(res.data.Details) : res.data.Error));
-            }
-        })
-        .catch(err => console.log(err));
+            if (res.data.Status === "Success") { alert("SMS Sent Successfully!"); } 
+            else { alert("Error sending SMS: " + (res.data.Details ? JSON.stringify(res.data.Details) : res.data.Error)); }
+        }).catch(err => console.log(err));
     };
-
-    const handleMarkPaid = (recordId) => {
-        const token = localStorage.getItem('token');
-        axios.put(`http://localhost:8081/mark-paid/${recordId}`, {}, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); });
-    };
-    const handleResetStatus = (recordId) => {
-        const token = localStorage.getItem('token');
-        axios.put(`http://localhost:8081/reset-status/${recordId}`, {}, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); });
-    };
-    const handleCancelTransaction = (recordId) => {
-        if(!window.confirm("CANCEL transaction?")) return;
-        const token = localStorage.getItem('token');
-        axios.delete(`http://localhost:8081/delete-record/${recordId}`, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); else alert("Error cancelling"); });
-    };
-    const handleCashOut = (type) => {
-        if(!window.confirm(`Cash out ${type}?`)) return;
-        const token = localStorage.getItem('token');
-        axios.put('http://localhost:8081/cash-out', { user_id: id, type }, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); });
-    };
+    const handleMarkPaid = (recordId) => { const token = localStorage.getItem('token'); axios.put(`http://localhost:8081/mark-paid/${recordId}`, {}, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); }); };
+    const handleResetStatus = (recordId) => { const token = localStorage.getItem('token'); axios.put(`http://localhost:8081/reset-status/${recordId}`, {}, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); }); };
+    const handleCancelTransaction = (recordId) => { if(!window.confirm("CANCEL transaction?")) return; const token = localStorage.getItem('token'); axios.delete(`http://localhost:8081/delete-record/${recordId}`, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); else alert("Error cancelling"); }); };
+    const handleCashOut = (type) => { if(!window.confirm(`Cash out ${type}?`)) return; const token = localStorage.getItem('token'); axios.put('http://localhost:8081/cash-out', { user_id: id, type }, { headers: { Authorization: token } }).then(res => { if(res.data.Status === "Success") fetchData(); }); };
 
     if (loading) return <div className="p-10 text-center">Loading...</div>;
     if (error) return <div className="p-10 text-center text-red-500">{error}</div>;
@@ -209,7 +192,7 @@ function MemberProfile() {
         <div className='min-h-screen p-6'>
             <button onClick={() => navigate('/dashboard')} className='mb-4 p-3 bg-white/0 backdrop-blur-[50px] rounded-[20px] border border-white/50 text-white hover:bg-blue-600 transition'>← Back to Dashboard</button>
 
-            {/* --- PROFILE HEADER & EDIT SECTION --- */}
+            {/* PROFILE HEADER & EDIT SECTION */}
             <div className='bg-white/0 backdrop-blur-[50px] p-6 rounded-[30px] shadow mb-6 border border-white/50 flex flex-col md:flex-row gap-6 items-center md:items-start'>
                 <div className='w-32 h-32 rounded-full overflow-hidden border-4 border-white/20 shadow-sm flex-shrink-0 bg-gray-200'>
                     {data.user.profile_picture ? <img src={`http://localhost:8081/images/${data.user.profile_picture}`} alt="Profile" className='w-full h-full object-cover'/> : <div className='w-full h-full flex items-center justify-center text-gray-400'>No Img</div>}
@@ -246,8 +229,8 @@ function MemberProfile() {
                 </div>
             </div>
 
+            {/* Rest of the component ... */}
             <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
-                {/* LOAN TRACKER */}
                 <div className='space-y-6'>
                     <div className='bg-white/0 backdrop-blur-[50px] p-6 rounded-[30px] shadow border border-white/50'>
                         <h2 className='text-xl font-bold mb-4 text-white'>Loan Tracker</h2>
@@ -291,7 +274,6 @@ function MemberProfile() {
                     </div>
                 </div>
 
-                {/* HISTORY */}
                 <div className='space-y-6'>
                     <div className='grid grid-cols-2 gap-4'>
                         <div className='bg-white/0 backdrop-blur-[50px] p-4 rounded-[30px] shadow border border-white/50 text-center'><h3 className='text-white text-sm uppercase font-bold'>Savings</h3><p className='text-2xl font-bold text-white'>₱{data.savingsTotal}</p>{Number(data.savingsTotal) > 0 && <button onClick={() => handleCashOut('savings')} className='mt-2 text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 font-bold'>Cash Out</button>}</div>
@@ -312,7 +294,6 @@ function MemberProfile() {
                                         <td className='p-3 text-white'>{new Date(rec.due_date).toLocaleDateString()}</td>
                                         <td className='p-3'><span className={`px-2 py-1 rounded-full text-xs font-bold ${rec.status === 'paid' ? 'bg-green-100 text-green-700' : rec.status === 'late' ? 'bg-orange-100 text-orange-700' : rec.status === 'pending' ? 'bg-blue-900/50 text-blue-200 border border-blue-400' : 'bg-red-100 text-red-700'}`}>{rec.status}</span></td>
                                         <td className='p-3 flex justify-center items-center gap-2'>
-                                            {/* PAY & SMS BUTTONS */}
                                             {rec.status === 'pending' && (
                                                 <>
                                                     <button onClick={() => handleMarkPaid(rec.id)} className='bg-blue-100 text-blue-700 px-3 py-1 rounded text-xs hover:bg-blue-200 font-semibold'>Pay</button>
