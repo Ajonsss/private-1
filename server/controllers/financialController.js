@@ -1,6 +1,7 @@
 const Financial = require('../models/financialModel');
 const Notification = require('../models/notificationModel');
 const User = require('../models/userModel');
+const axios = require('axios'); // Required for iProgSMS
 
 // --- HELPER: Calculate Next Date based on Day Name ---
 function getNextDayOfWeek(startDate, dayName) {
@@ -23,11 +24,42 @@ function getNextDayOfWeek(startDate, dayName) {
     return resultDate;
 }
 
+// --- NEW: SMS NOTIFICATION ---
+exports.sendSmsNotification = (req, res) => {
+    if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
+    
+    const { phone_number, message } = req.body;
+
+    // Use axios to send a POST request with Query Parameters matches your URL structure
+    // Endpoint: https://www.iprogsms.com/api/v1/sms_messages
+    axios.post('https://www.iprogsms.com/api/v1/sms_messages', null, {
+        params: {
+            api_token: "699548218c31db93a667e2b6e2ec979db6781904", // Your Actual API Key
+            message: message,
+            phone_number: phone_number
+        }
+    })
+    .then(response => {
+        // Log the response for debugging
+        console.log("SMS Response:", response.data);
+
+        // Check for success (Adjust based on actual API response, usually 200 OK is enough)
+        if (response.status === 200 || response.data.success) {
+            return res.json({ Status: "Success", Details: response.data });
+        } else {
+            return res.json({ Error: "SMS Provider Error", Details: response.data });
+        }
+    })
+    .catch(err => {
+        console.error("SMS Error Details:", err.response ? err.response.data : err.message);
+        return res.json({ Error: "Failed to connect to SMS Gateway" });
+    });
+};
+
 // --- LOANS ---
 exports.assignLoan = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
     
-    // Destructure new inputs: weeks, payment_day, weekly_amount
     const { user_id, amount, loan_name, weeks, payment_day, weekly_amount } = req.body;
 
     Financial.findActiveLoan(user_id, (err, result) => {
@@ -37,22 +69,19 @@ exports.assignLoan = (req, res) => {
             user_id, 
             amount, 
             loan_name: loan_name || 'Personal Loan',
-            weeks_to_pay: weeks,       // Save terms to DB
-            payment_day: payment_day,  // Save preferred day to DB
+            weeks_to_pay: weeks,       
+            payment_day: payment_day,  
             weekly_amount: weekly_amount
         };
 
         Financial.createLoan(loanData, (err, loanResult) => {
             if (err) return res.json({ Error: "Database Error" });
 
-            // GET THE NEW LOAN ID (Assuming standard MySQL result structure)
             const newLoanId = loanResult.insertId;
 
             // --- AUTOMATIC SCHEDULE GENERATION ---
-            // Create a pending record for every week based on the terms
             let currentDateTracker = new Date();
             
-            // Loop through the number of weeks
             for(let i = 0; i < weeks; i++) {
                 currentDateTracker = getNextDayOfWeek(currentDateTracker, payment_day);
                 
@@ -60,12 +89,11 @@ exports.assignLoan = (req, res) => {
                     user_id: user_id,
                     type: 'loan_payment',
                     amount: weekly_amount,
-                    due_date: currentDateTracker.toISOString().split('T')[0], // Format YYYY-MM-DD
+                    due_date: currentDateTracker.toISOString().split('T')[0],
                     loan_id: newLoanId,
-                    status: 'pending' // These will show up in history immediately
+                    status: 'pending'
                 };
 
-                // Insert record (Fire and forget for loop speed, or use Promise.all in production)
                 Financial.createRecord(recordData, () => {});
             }
 
@@ -84,13 +112,11 @@ exports.assignLoan = (req, res) => {
     });
 };
 
-// --- NEW: DELETE LOAN ---
+// --- DELETE LOAN ---
 exports.deleteActiveLoan = (req, res) => {
     if (req.user.role !== 'leader') return res.json({ Error: "Access Denied" });
     const loanId = req.params.loanId;
 
-    // Call Model to delete loan. 
-    // NOTE: Ensure your SQL Model also deletes associated financial_records OR you use ON DELETE CASCADE in your database schema.
     Financial.deleteLoan(loanId, (err) => {
         if(err) return res.json({ Error: "Error deleting loan" });
         return res.json({ Status: "Success" });

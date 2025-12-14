@@ -14,7 +14,7 @@ function MemberProfile() {
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({ full_name: '', phone_number: '', birthdate: '', spouse_name: '' });
     
-    // NEW: Auth Update State (For Admin changing Member credentials)
+    // Auth Update State
     const [authForm, setAuthForm] = useState({ new_phone: '', new_password: '' });
     const userRole = localStorage.getItem('role');
 
@@ -68,24 +68,15 @@ function MemberProfile() {
             });
     };
 
-    // --- EDIT HANDLERS ---
-    const handleEditChange = (e) => {
-        setEditForm({ ...editForm, [e.target.name]: e.target.value });
-    };
-
-    const handleAuthChange = (e) => {
-        setAuthForm({ ...authForm, [e.target.name]: e.target.value });
-    };
+    // --- HANDLERS ---
+    const handleEditChange = (e) => setEditForm({ ...editForm, [e.target.name]: e.target.value });
+    const handleAuthChange = (e) => setAuthForm({ ...authForm, [e.target.name]: e.target.value });
 
     const handleSaveMember = () => {
         const token = localStorage.getItem('token');
-        
-        // 1. Update Personal Details
         axios.put(`http://localhost:8081/update-member/${id}`, editForm, { headers: { Authorization: token } })
             .then(res => {
                 if(res.data.Status === "Success") {
-                    
-                    // 2. Update Auth (Phone/Pass) if changed
                     if (authForm.new_password || authForm.new_phone !== data.user.phone_number) {
                         axios.put(`http://localhost:8081/update-member-auth/${id}`, authForm, { headers: { Authorization: token } })
                             .then(authRes => {
@@ -113,7 +104,6 @@ function MemberProfile() {
         const token = localStorage.getItem('token');
         if(!loanAmount || !loanWeeks) return alert("Please fill all loan details");
         
-        // Prepare Payload
         const payload = {
             user_id: id,
             amount: loanAmount,
@@ -131,7 +121,6 @@ function MemberProfile() {
                     alert("Loan Created & Schedule Generated"); 
                     setLoanAmount(''); 
                     setLoanName(''); 
-                    // Reset defaults
                     setLoanWeeks(1);
                     fetchData(); 
                 } 
@@ -165,6 +154,29 @@ function MemberProfile() {
                 if(res.data.Status === "Success") { fetchData(); setPaymentForm({ ...paymentForm, amount: '', due_date: '' }); } 
                 else alert(res.data.Error);
             });
+    };
+
+    // --- NEW SMS HANDLER ---
+    const handleSendSMS = (record) => {
+        if (!window.confirm(`Send SMS reminder to ${data.user.phone_number}?`)) return;
+
+        const token = localStorage.getItem('token');
+        const message = `Hi ${data.user.full_name}, this is a reminder for your ${record.type.replace('_', ' ')} of P${record.amount} due on ${new Date(record.due_date).toLocaleDateString()}. Please pay on time.`;
+
+        axios.post('http://localhost:8081/send-sms', {
+            phone_number: data.user.phone_number,
+            message: message
+        }, {
+            headers: { Authorization: token }
+        })
+        .then(res => {
+            if (res.data.Status === "Success") {
+                alert("SMS Sent Successfully!");
+            } else {
+                alert("Error sending SMS: " + (res.data.Details ? JSON.stringify(res.data.Details) : res.data.Error));
+            }
+        })
+        .catch(err => console.log(err));
     };
 
     const handleMarkPaid = (recordId) => {
@@ -202,7 +214,6 @@ function MemberProfile() {
                 <div className='w-32 h-32 rounded-full overflow-hidden border-4 border-white/20 shadow-sm flex-shrink-0 bg-gray-200'>
                     {data.user.profile_picture ? <img src={`http://localhost:8081/images/${data.user.profile_picture}`} alt="Profile" className='w-full h-full object-cover'/> : <div className='w-full h-full flex items-center justify-center text-gray-400'>No Img</div>}
                 </div>
-
                 <div className='flex-1 w-full'>
                     {!isEditing ? (
                         <div className='flex justify-between items-start'>
@@ -210,11 +221,8 @@ function MemberProfile() {
                                 <h1 className='text-2xl font-bold'>{data.user.full_name}</h1>
                                 <p className='text-white/80'>{data.user.phone_number} - <span className='capitalize'>{data.user.role}</span></p>
                                 {data.user.birthdate && <p className='text-sm text-white/70'>Born: {new Date(data.user.birthdate).toLocaleDateString()}</p>}
-                                {data.user.spouse_name && <p className='text-sm text-white/70'>Spouse: {data.user.spouse_name}</p>}
                             </div>
-                            {userRole === 'leader' && (
-                                <button onClick={() => setIsEditing(true)} className='bg-white/10 border border-white text-white px-4 py-2 rounded-[10px] hover:bg-white/20 transition'>Edit Profile</button>
-                            )}
+                            {userRole === 'leader' && <button onClick={() => setIsEditing(true)} className='bg-white/10 border border-white text-white px-4 py-2 rounded-[10px] hover:bg-white/20 transition'>Edit Profile</button>}
                         </div>
                     ) : (
                         <div className='space-y-4 bg-white/10 p-4 rounded-[20px] border border-white/20'>
@@ -224,19 +232,11 @@ function MemberProfile() {
                                 <div><label className='text-xs font-bold text-white uppercase'>Birthdate</label><input type="date" name="birthdate" value={editForm.birthdate} onChange={handleEditChange} className='w-full p-2 rounded-[10px] bg-white/80 text-gray-800' /></div>
                                 <div><label className='text-xs font-bold text-white uppercase'>Spouse</label><input type="text" name="spouse_name" value={editForm.spouse_name} onChange={handleEditChange} className='w-full p-2 rounded-[10px] bg-white/80 text-gray-800' /></div>
                             </div>
-
                             <h3 className='text-white font-bold border-b border-white/20 pb-2 pt-2'>Login Credentials (Admin Only)</h3>
                             <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                                <div>
-                                    <label className='text-xs font-bold text-white uppercase'>New Phone Number</label>
-                                    <input type="text" name="new_phone" value={authForm.new_phone} onChange={handleAuthChange} className='w-full p-2 rounded-[10px] bg-white/80 text-gray-800' placeholder="Update Phone" />
-                                </div>
-                                <div>
-                                    <label className='text-xs font-bold text-white uppercase'>New Password</label>
-                                    <input type="password" name="new_password" value={authForm.new_password} onChange={handleAuthChange} className='w-full p-2 rounded-[10px] bg-white/80 text-gray-800' placeholder="Set New Password (Strong)" />
-                                </div>
+                                <div><label className='text-xs font-bold text-white uppercase'>New Phone Number</label><input type="text" name="new_phone" value={authForm.new_phone} onChange={handleAuthChange} className='w-full p-2 rounded-[10px] bg-white/80 text-gray-800' placeholder="Update Phone" /></div>
+                                <div><label className='text-xs font-bold text-white uppercase'>New Password</label><input type="password" name="new_password" value={authForm.new_password} onChange={handleAuthChange} className='w-full p-2 rounded-[10px] bg-white/80 text-gray-800' placeholder="Set New Password (Strong)" /></div>
                             </div>
-
                             <div className='flex gap-2 mt-4'>
                                 <button onClick={handleSaveMember} className='bg-green-600 text-white px-4 py-2 rounded-[10px] hover:bg-green-700 font-semibold'>Save All Changes</button>
                                 <button onClick={() => setIsEditing(false)} className='bg-gray-500 text-white px-4 py-2 rounded-[10px] hover:bg-gray-600'>Cancel</button>
@@ -254,46 +254,19 @@ function MemberProfile() {
                         {!data.activeLoan ? (
                             <div className='flex flex-col gap-4'>
                                 <input type="text" placeholder="Loan Name (e.g. Emergency Loan)" className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanName} onChange={e => setLoanName(e.target.value)} />
-                                
                                 <div className='flex gap-2'>
-                                    <div className='w-1/2'>
-                                        <label className='text-xs text-white uppercase font-bold'>Total Amount</label>
-                                        <input type="number" placeholder="Amount" className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanAmount} onChange={e => setLoanAmount(e.target.value)} />
-                                    </div>
-                                    <div className='w-1/2'>
-                                        <label className='text-xs text-white uppercase font-bold'>Weeks to Pay</label>
-                                        <input type="number" placeholder="Weeks" className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanWeeks} onChange={e => setLoanWeeks(e.target.value)} min="1" />
-                                    </div>
+                                    <div className='w-1/2'><label className='text-xs text-white uppercase font-bold'>Total Amount</label><input type="number" placeholder="Amount" className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanAmount} onChange={e => setLoanAmount(e.target.value)} /></div>
+                                    <div className='w-1/2'><label className='text-xs text-white uppercase font-bold'>Weeks to Pay</label><input type="number" placeholder="Weeks" className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanWeeks} onChange={e => setLoanWeeks(e.target.value)} min="1" /></div>
                                 </div>
-
                                 <div className='flex gap-2'>
-                                    <div className='w-1/2'>
-                                        <label className='text-xs text-white uppercase font-bold'>Payment Day</label>
-                                        <select className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanDay} onChange={e => setLoanDay(e.target.value)}>
-                                            {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => <option key={d} value={d}>{d}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className='w-1/2'>
-                                        <label className='text-xs text-white uppercase font-bold'>Weekly Payment</label>
-                                        <div className='border p-2 rounded-[15px] w-full bg-white/50 text-gray-700 font-bold'>
-                                            ₱{weeklyPayment}
-                                        </div>
-                                    </div>
+                                    <div className='w-1/2'><label className='text-xs text-white uppercase font-bold'>Payment Day</label><select className='border p-2 rounded-[15px] w-full outline-none bg-white/80' value={loanDay} onChange={e => setLoanDay(e.target.value)}>{['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                                    <div className='w-1/2'><label className='text-xs text-white uppercase font-bold'>Weekly Payment</label><div className='border p-2 rounded-[15px] w-full bg-white/50 text-gray-700 font-bold'>₱{weeklyPayment}</div></div>
                                 </div>
-
-                                <button onClick={handleCreateLoan} className='bg-blue-600 text-white px-4 py-3 rounded-[15px] font-semibold hover:bg-blue-700 shadow-md mt-2'>
-                                    Create Loan & Generate Schedule
-                                </button>
+                                <button onClick={handleCreateLoan} className='bg-blue-600 text-white px-4 py-3 rounded-[15px] font-semibold hover:bg-blue-700 shadow-md mt-2'>Create Loan & Generate Schedule</button>
                             </div>
                         ) : (
                             <div className='text-center relative'>
-                                {/* DELETE BUTTON */}
-                                {userRole === 'leader' && (
-                                    <button onClick={handleDeleteLoan} className='absolute top-0 right-0 bg-red-500/20 hover:bg-red-600 text-red-100 hover:text-white border border-red-500 p-2 rounded-lg text-xs transition'>
-                                        Delete Loan
-                                    </button>
-                                )}
-
+                                {userRole === 'leader' && (<button onClick={handleDeleteLoan} className='absolute top-0 right-0 bg-red-500/20 hover:bg-red-600 text-red-100 hover:text-white border border-red-500 p-2 rounded-lg text-xs transition'>Delete Loan</button>)}
                                 <h3 className='text-white font-bold text-lg mb-2 border-b border-white/20 pb-2'>{data.activeLoan.loan_name || 'Active Loan'}</h3>
                                 <div className='py-4'><span className='text-6xl font-extrabold text-white drop-shadow-md'>{Math.round(loanProgress)}%</span><p className='text-white/70 uppercase tracking-widest text-sm mt-2'>Loan Paid</p></div>
                                 <div className='flex justify-between items-center border-t border-white/20 pt-4 mt-2 text-white'>
@@ -332,7 +305,26 @@ function MemberProfile() {
                         </div>
                         <div className='overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar'>
                             <table className='w-full text-sm text-left'><thead className='bg-white/10 text-white sticky top-0 backdrop-blur-md'><tr><th className='p-3'>Type</th><th className='p-3'>Amount</th><th className='p-3'>Due</th><th className='p-3'>Status</th><th className='p-3 text-center'>Action</th></tr></thead>
-                                <tbody className='divide-y divide-white/20 px-3'>{filteredRecords.map(rec => (<tr key={rec.id} className='hover:bg-white/10 transition'><td className='p-3 capitalize text-white'>{rec.type === 'loan_payment' && rec.loan_name ? <span>Loan Pmt: {rec.loan_name}</span> : rec.type.replace('_', ' ')}</td><td className='p-3 font-medium text-white'>₱{rec.amount}</td><td className='p-3 text-white'>{new Date(rec.due_date).toLocaleDateString()}</td><td className='p-3'><span className={`px-2 py-1 rounded-full text-xs font-bold ${rec.status === 'paid' ? 'bg-green-100 text-green-700' : rec.status === 'late' ? 'bg-orange-100 text-orange-700' : rec.status === 'pending' ? 'bg-blue-900/50 text-blue-200 border border-blue-400' : 'bg-red-100 text-red-700'}`}>{rec.status}</span></td><td className='p-3 flex justify-center items-center gap-2'>{rec.status === 'pending' && <button onClick={() => handleMarkPaid(rec.id)} className='bg-blue-100 text-blue-700 px-3 py-1 rounded text-xs hover:bg-blue-200 font-semibold'>Pay</button>}{(rec.status === 'paid' || rec.status === 'late') && <button onClick={() => handleResetStatus(rec.id)} className='text-white hover:text-gray-300 text-xs underline'>Undo</button>}<button onClick={() => handleCancelTransaction(rec.id)} className='text-red-400 hover:text-red-600 bg-red-100/10 p-1 rounded-full w-6 h-6 flex items-center justify-center font-bold'>✕</button></td></tr>))}</tbody></table>
+                                <tbody className='divide-y divide-white/20 px-3'>{filteredRecords.map(rec => (
+                                    <tr key={rec.id} className='hover:bg-white/10 transition'>
+                                        <td className='p-3 capitalize text-white'>{rec.type === 'loan_payment' && rec.loan_name ? <span>Loan Pmt: {rec.loan_name}</span> : rec.type.replace('_', ' ')}</td>
+                                        <td className='p-3 font-medium text-white'>₱{rec.amount}</td>
+                                        <td className='p-3 text-white'>{new Date(rec.due_date).toLocaleDateString()}</td>
+                                        <td className='p-3'><span className={`px-2 py-1 rounded-full text-xs font-bold ${rec.status === 'paid' ? 'bg-green-100 text-green-700' : rec.status === 'late' ? 'bg-orange-100 text-orange-700' : rec.status === 'pending' ? 'bg-blue-900/50 text-blue-200 border border-blue-400' : 'bg-red-100 text-red-700'}`}>{rec.status}</span></td>
+                                        <td className='p-3 flex justify-center items-center gap-2'>
+                                            {/* PAY & SMS BUTTONS */}
+                                            {rec.status === 'pending' && (
+                                                <>
+                                                    <button onClick={() => handleMarkPaid(rec.id)} className='bg-blue-100 text-blue-700 px-3 py-1 rounded text-xs hover:bg-blue-200 font-semibold'>Pay</button>
+                                                    <button onClick={() => handleSendSMS(rec)} className='bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs hover:bg-yellow-200 font-bold border border-yellow-300' title="Send SMS Reminder">📱</button>
+                                                </>
+                                            )}
+                                            {(rec.status === 'paid' || rec.status === 'late') && <button onClick={() => handleResetStatus(rec.id)} className='text-white hover:text-gray-300 text-xs underline'>Undo</button>}
+                                            <button onClick={() => handleCancelTransaction(rec.id)} className='text-red-400 hover:text-red-600 bg-red-100/10 p-1 rounded-full w-6 h-6 flex items-center justify-center font-bold'>✕</button>
+                                        </td>
+                                    </tr>
+                                ))}</tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

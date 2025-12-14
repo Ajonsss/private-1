@@ -16,10 +16,10 @@ const authRoutes = require('./routes/authRoutes');
 const memberRoutes = require('./routes/memberRoutes');
 const financialRoutes = require('./routes/financialRoutes');
 
-// Import Controller (Ensure this path is correct based on your folder structure)
+// Import Controller (Ensure this path is correct)
 const financialController = require('./controllers/financialController'); 
 
-// Middleware: Verify User (Defined here to ensure the delete route works)
+// Middleware: Verify User
 const verifyUser = (req, res, next) => {
     const token = req.headers.authorization;
     if (!token) return res.json({ Error: "You are not authenticated" });
@@ -37,8 +37,13 @@ app.use('/', authRoutes);
 app.use('/', memberRoutes);
 app.use('/', financialRoutes);
 
-// NEW ROUTE: Delete Active Loan
+// --- NEW ROUTES ---
+
+// 1. Delete Active Loan
 app.delete('/delete-active-loan/:loanId', verifyUser, financialController.deleteActiveLoan);
+
+// 2. Send SMS Notification
+app.post('/send-sms', verifyUser, financialController.sendSmsNotification);
 
 const PORT = 8081;
 app.listen(PORT, () => {
